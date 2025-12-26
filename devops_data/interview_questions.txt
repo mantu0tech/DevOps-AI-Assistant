@@ -1,0 +1,11 @@
+Topic: Docker
+Q: What is the difference between CMD and ENTRYPOINT?
+A: CMD provides default arguments while ENTRYPOINT defines the executable.
+
+Topic: Kubernetes
+Q: What is the difference between Deployment and StatefulSet?
+A: Deployment is stateless, StatefulSet maintains identity and storage.
+
+Topic: Jenkins
+Q: What is a Jenkins pipeline?
+A: Pipeline is a set of automated steps defined in Jenkinsfile.

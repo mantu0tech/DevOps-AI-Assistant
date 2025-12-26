@@ -1,0 +1,5 @@
+Q: What is Jenkins?
+A: Jenkins is a CI/CD automation tool used for building, testing, and deploying applications.
+
+Q: Jenkins error: Permission denied
+A: Fix file permission or run Jenkins with proper user access.

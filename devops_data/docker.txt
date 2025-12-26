@@ -1,0 +1,6 @@
+Q: What is Docker?
+A: Docker is a containerization platform that packages application code and dependencies into containers.
+
+Q: Docker error: Cannot connect to the Docker daemon
+A: This happens when Docker service is not running. Start Docker service using systemctl or Docker Desktop.
+    
