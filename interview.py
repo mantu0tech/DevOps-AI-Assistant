@@ -1,113 +1,207 @@
-from langchain_ollama import OllamaLLM, OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import CharacterTextSplitter
-import os
+from langchain_ollama import OllamaLLM
+import random
 
 # ----------------------------
 # CONFIG
 # ----------------------------
 TOTAL_QUESTIONS = 5
 PASS_SCORE = 3
-CACHE_DIR = "chroma_db"  # folder to store embeddings
 
 # ----------------------------
 # LLM SETUP
 # ----------------------------
+print("🔧 Initializing LLM...")
 llm = OllamaLLM(model="llama3")
 
 # ----------------------------
-# INTERVIEW LINKS (FREE)
+# TOPICS
 # ----------------------------
-URLS = [
-    "https://www.interviewbit.com/devops-interview-questions/",
-    "https://www.interviewbit.com/linux-interview-questions/",
-    "https://www.interviewbit.com/aws-interview-questions/",
-    "https://www.interviewbit.com/ansible-interview-questions/",
-    "https://www.interviewbit.com/terraform-interview-questions/",
-    "https://www.interviewbit.com/monitoring-interview-questions/",
-    "https://www.interviewbit.com/docker-interview-questions/",
-    "https://www.interviewbit.com/kubernetes-interview-questions/"
-]
+TOPICS = {
+    "devops": "DevOps practices, CI/CD, automation, and culture",
+    "linux": "Linux commands, system administration, shell scripting",
+    "aws": "AWS services, cloud architecture, EC2, S3, Lambda",
+    "ansible": "Ansible playbooks, automation, configuration management",
+    "terraform": "Infrastructure as Code, Terraform syntax, state management",
+    "monitoring": "Monitoring tools, metrics, logging, observability",
+    "docker": "Docker containers, images, dockerfile, docker-compose",
+    "kubernetes": "K8s architecture, pods, services, deployments"
+}
 
 # ----------------------------
-# LOAD & STORE QUESTIONS
+# TOPIC SELECTION
 # ----------------------------
-if os.path.exists(CACHE_DIR):
-    print("Loading cached embeddings...")
-    db = Chroma(persist_directory=CACHE_DIR, embedding_function=OllamaEmbeddings(model="llama3"))
-    documents = []  # Optional: can't access original docs from cache
-else:
-    print("Loading interview questions from web ...")
-    loader = WebBaseLoader(URLS)
-    docs = loader.load()
+print("\n" + "="*60)
+print("🎯 DEVOPS INTERVIEW SIMULATOR - AI POWERED")
+print("="*60)
+print("\nAvailable Topics:")
+for idx, (topic, desc) in enumerate(TOPICS.items(), 1):
+    print(f"  {idx}. {topic.upper():<15} - {desc}")
 
-    splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=50)
-    documents = splitter.split_documents(docs)
+topic = input("\n👉 Choose topic: ").lower().strip()
 
-    db = Chroma.from_documents(
-        documents,
-        embedding=OllamaEmbeddings(model="llama3"),
-        persist_directory=CACHE_DIR
-    )
-    db.persist()
+if topic not in TOPICS:
+    print(f"❌ Invalid topic. Choose from: {', '.join(TOPICS.keys())}")
+    exit()
 
-print("Sample chunks loaded:")
-if documents:
-    for doc in documents[:5]:
-        print(doc.page_content[:200])
-else:
-    print("⚠️ Original documents not loaded (cache only). Similarity search will still work.")
+difficulty = input("👉 Choose difficulty (beginner/intermediate/advanced): ").lower().strip()
+if difficulty not in ['beginner', 'intermediate', 'advanced']:
+    difficulty = 'intermediate'
+
+print(f"\n✅ Starting {topic.upper()} interview ({difficulty} level)")
+print("⏳ Generating {0} unique questions...\n".format(TOTAL_QUESTIONS))
 
 # ----------------------------
-# SYSTEM PROMPT
+# GENERATE QUESTIONS
 # ----------------------------
-SYSTEM_PROMPT = """
-You are a senior DevOps interviewer.
-Evaluate the candidate answer.
-If the answer is mostly correct, say "CORRECT".
-If the answer is wrong or incomplete, say "INCORRECT".
-Then give brief feedback and the correct answer.
+QUESTION_PROMPT = f"""You are a senior DevOps interviewer. Generate {TOTAL_QUESTIONS} unique {difficulty}-level interview questions about {topic} ({TOPICS[topic]}).
+
+Requirements:
+- Each question should be practical and commonly asked in real interviews
+- Mix of theoretical and scenario-based questions
+- Questions should be clear and specific
+- Number each question (1., 2., 3., etc.)
+- Only provide the questions, no answers
+
+Format:
+1. [First question]
+2. [Second question]
+3. [Third question]
+etc.
 """
+
+try:
+    questions_text = llm.invoke(QUESTION_PROMPT)
+    
+    # Parse questions
+    import re
+    questions = re.findall(r'\d+\.\s+(.+?)(?=\d+\.|$)', questions_text, re.DOTALL)
+    questions = [q.strip() for q in questions if len(q.strip()) > 10]
+    
+    if len(questions) < TOTAL_QUESTIONS:
+        print(f"⚠️ Only generated {len(questions)} questions")
+        TOTAL_QUESTIONS = len(questions)
+    else:
+        questions = questions[:TOTAL_QUESTIONS]
+    
+except Exception as e:
+    print(f"❌ Error generating questions: {e}")
+    exit()
+
+# ----------------------------
+# EVALUATION PROMPT
+# ----------------------------
+EVAL_PROMPT = """You are a senior DevOps interviewer evaluating a candidate's answer.
+
+Evaluate based on:
+1. Technical accuracy
+2. Completeness of answer
+3. Practical understanding
+4. Real-world applicability
+
+Response format:
+- Start with either "CORRECT" or "INCORRECT"
+- Provide 2-3 sentences of constructive feedback
+- If incorrect, briefly mention key points they missed
+
+Be fair but thorough in your evaluation."""
 
 # ----------------------------
 # INTERVIEW SESSION
 # ----------------------------
-topic = input("Choose topic (devops/linux/aws/ansible/terraform/monitoring/docker/kubernetes): ").lower()
+print("="*60)
+input("Press ENTER when ready to start...")
+
 score = 0
+answers_log = []
 
-for i in range(1, TOTAL_QUESTIONS + 1):
-    print(f"\n📌 Question {i}/{TOTAL_QUESTIONS}")
-    result = db.similarity_search(topic, k=1)
-    if not result:
-        print("⚠️ No question found for this topic. Skipping...")
+for i in range(TOTAL_QUESTIONS):
+    print(f"\n{'='*60}")
+    print(f"📌 QUESTION {i+1}/{TOTAL_QUESTIONS}")
+    print('='*60)
+    
+    question = questions[i]
+    print(f"\n🧑‍💼 {question}\n")
+    
+    user_answer = input("👤 YOUR ANSWER: ").strip()
+    
+    if not user_answer:
+        print("\n❌ No answer provided - marking as incorrect\n")
+        answers_log.append({
+            'question': question,
+            'answer': user_answer,
+            'correct': False,
+            'feedback': 'No answer provided'
+        })
         continue
-
-    question = result[0].page_content
-    print("\n🧑‍💼 Interviewer:\n")
-    print(question[:500])
-
-    user_answer = input("\n👤 Your Answer: ")
-
-    evaluation = llm.invoke(
-        SYSTEM_PROMPT +
-        "\nQuestion:\n" + question +
-        "\nCandidate Answer:\n" + user_answer
-    )
-
-    print("\n📋 Feedback:\n")
-    print(evaluation)
-
-    if "CORRECT" in evaluation.upper():
-        score += 1
+    
+    print("\n⏳ Evaluating your answer...\n")
+    
+    try:
+        evaluation = llm.invoke(
+            EVAL_PROMPT +
+            f"\n\nQUESTION: {question}" +
+            f"\n\nCANDIDATE'S ANSWER: {user_answer}" +
+            f"\n\nYOUR EVALUATION:"
+        )
+        
+        print("📋 FEEDBACK:")
+        print("-" * 60)
+        print(evaluation)
+        print("-" * 60)
+        
+        is_correct = "CORRECT" in evaluation.upper()
+        
+        if is_correct:
+            score += 1
+            print("\n✅ +1 Point!")
+        else:
+            print("\n❌ No points")
+        
+        answers_log.append({
+            'question': question,
+            'answer': user_answer,
+            'correct': is_correct,
+            'feedback': evaluation
+        })
+            
+    except Exception as e:
+        print(f"⚠️ Evaluation error: {e}")
+        continue
+    
+    if i < TOTAL_QUESTIONS - 1:
+        input("\nPress ENTER for next question...")
 
 # ----------------------------
 # FINAL RESULT
 # ----------------------------
-print("\n" + "=" * 40)
-print("🏁 INTERVIEW RESULT")
-print("=" * 40)
-print(f"Total Questions : {TOTAL_QUESTIONS}")
-print(f"Correct Answers : {score}")
-print(f"Incorrect       : {TOTAL_QUESTIONS - score}")
-print("✅ Status: PASSED" if score >= PASS_SCORE else "❌ Status: FAILED")
+percentage = (score / TOTAL_QUESTIONS) * 100
+
+print("\n" + "=" * 60)
+print("🏁 FINAL RESULTS")
+print("=" * 60)
+print(f"📊 Score: {score}/{TOTAL_QUESTIONS} ({percentage:.0f}%)")
+print(f"✅ Correct: {score}")
+print(f"❌ Incorrect: {TOTAL_QUESTIONS - score}")
+print("=" * 60)
+
+if score >= PASS_SCORE:
+    print("\n🎉 STATUS: PASSED! 🎉")
+    print("Excellent work! You demonstrated strong knowledge.")
+else:
+    print(f"\n😔 STATUS: FAILED (needed {PASS_SCORE}/{TOTAL_QUESTIONS})")
+    print("Keep studying and try again! Practice makes perfect.")
+
+# ----------------------------
+# REVIEW SUMMARY
+# ----------------------------
+print("\n" + "=" * 60)
+print("📝 QUESTION REVIEW")
+print("=" * 60)
+
+for idx, log in enumerate(answers_log, 1):
+    status = "✅" if log['correct'] else "❌"
+    print(f"\n{status} Q{idx}: {log['question'][:80]}...")
+    print(f"   Your answer: {log['answer'][:100]}...")
+
+print("\n👋 Thanks for participating!")
+print("\n💡 TIP: Run the script again for a fresh set of questions!\n")
