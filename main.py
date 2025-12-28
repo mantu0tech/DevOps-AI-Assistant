@@ -1,12 +1,16 @@
 import streamlit as st
-from langchain_ollama import OllamaLLM
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import OllamaEmbeddings
-import os
+from langchain_groq import ChatGroq
+from langchain_huggingface import HuggingFaceEmbeddings
+
 import re
 from concurrent.futures import ThreadPoolExecutor
+import os
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 # ----------------------------
 # PAGE CONFIG
@@ -44,6 +48,30 @@ if 'questions' not in st.session_state:
 
 if 'answers_log' not in st.session_state:
     st.session_state.answers_log = []
+
+# ----------------------------
+# HELPER FUNCTIONS
+# ----------------------------
+def is_devops_related(query):
+    """Check if query is DevOps related"""
+    devops_keywords = [
+        'devops', 'docker', 'kubernetes', 'k8s', 'jenkins', 'ci/cd', 'cicd',
+        'git', 'github', 'gitlab', 'ansible', 'terraform', 'aws', 'azure', 'gcp',
+        'cloud', 'linux', 'bash', 'shell', 'container', 'pod', 'deployment',
+        'pipeline', 'automation', 'infrastructure', 'monitoring', 'prometheus',
+        'grafana', 'elk', 'nginx', 'apache', 'server', 'network', 'security',
+        'helm', 'argocd', 'maven', 'gradle', 'nexus', 'artifactory',
+        'microservices', 'orchestration', 'scaling', 'load balancer', 'vpc',
+        'ec2', 'ecs', 'eks', 'lambda', 's3', 'iam', 'cloudformation',
+        'vagrant', 'packer', 'consul', 'vault', 'istio', 'service mesh',
+        'ingress', 'egress', 'firewall', 'dns', 'ssl', 'tls', 'https',
+        'yaml', 'json', 'api', 'rest', 'webhook', 'cron', 'systemd',
+        'daemon', 'process', 'thread', 'cpu', 'memory', 'disk', 'storage',
+        'backup', 'disaster recovery', 'high availability', 'redundancy', 'python','aws','azure','networking'
+    ]
+    
+    query_lower = query.lower()
+    return any(keyword in query_lower for keyword in devops_keywords)
 
 # ----------------------------
 # THEME STYLES
@@ -296,16 +324,13 @@ load_theme()
 # ----------------------------
 # OPTIMIZED LLM SETUP
 # ----------------------------
+
 @st.cache_resource
 def load_llm():
-    # Ultra-fast configuration
-    return OllamaLLM(
-        model="llama3",
-        temperature=0.5,  # Lower = faster
-        num_predict=128,  # Max 128 tokens = super fast
-        top_k=10,         # Reduced for speed
-        top_p=0.8,        # Focused responses
-        repeat_penalty=1.1
+    return ChatGroq(
+        model="llama-3.1-8b-instant",
+        api_key=os.environ.get("GROQ_API_KEY"),
+        temperature=0.7
     )
 
 @st.cache_resource
@@ -326,7 +351,9 @@ def load_documents():
             
             db = Chroma.from_documents(
                 documents,
-                embedding=OllamaEmbeddings(model="llama3")
+                embedding=HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                )
             )
             return db, len(documents)
     return None, 0
@@ -380,14 +407,14 @@ with st.sidebar:
         st.write("""
         **DevOps AI Assistant**
         
-        - Ask DevOps questions
+        - Ask DevOps questions only
         - Take technical interviews
-        - Powered by Llama3
+        - Powered by Llama3 via Groq
         - Fast & optimized
         """)
 
 # ----------------------------
-# CHAT MODE (OPTIMIZED)
+# CHAT MODE (OPTIMIZED WITH DEVOPS FILTER)
 # ----------------------------
 if st.session_state.mode == "chat":
     st.title("💬 DevOps Chat Assistant")
@@ -408,30 +435,52 @@ if st.session_state.mode == "chat":
             st.write(user_input)
         
         with st.chat_message("assistant"):
-            with st.spinner("💭"):
-                # Ultra-short optimized prompt
-                PROMPT = f"Answer briefly: {user_input}"
-                
-                try:
-                    if db:
-                        docs = db.similarity_search(user_input, k=1)  # Only 1 doc
-                        context = docs[0].page_content[:150] if docs else ""
-                        response = llm.invoke(f"{context}\n{PROMPT}")
-                    else:
-                        response = llm.invoke(PROMPT)
+            # Check if query is DevOps related
+            if not is_devops_related(user_input):
+                warning_msg = "⚠️ I'm a DevOps specialist assistant. I can only answer questions related to DevOps, Cloud Computing, Docker, Kubernetes, CI/CD, Linux, Git, Infrastructure, and related technologies. Please ask a DevOps-related question."
+                st.warning(warning_msg)
+                st.session_state.chat_history.append({"role": "assistant", "content": warning_msg})
+            else:
+                with st.spinner("💭 Thinking..."):
+                    try:
+                        if db:
+                            # Get relevant context from vector DB
+                            docs = db.similarity_search(user_input, k=2)
+                            context = "\n".join([doc.page_content[:200] for doc in docs]) if docs else ""
+                            
+                            prompt = f"""You are a DevOps expert assistant. Only answer questions related to DevOps, Cloud, Docker, Kubernetes, CI/CD, Linux, Git, and related technologies.
+
+Context: {context}
+
+Question: {user_input}
+
+Provide a clear and concise answer focused ONLY on DevOps topics:"""
+                            response = llm.invoke(prompt)
+                        else:
+                            prompt = f"""You are a DevOps expert assistant. Only answer questions related to DevOps, Cloud, Docker, Kubernetes, CI/CD, Linux, Git, and related technologies.
+
+Question: {user_input}
+
+Provide a clear and concise answer focused ONLY on DevOps topics:"""
+                            response = llm.invoke(prompt)
+                        
+                        # Extract content from response
+                        response_text = response.content if hasattr(response, 'content') else str(response)
+                        
+                        st.write(response_text)
+                        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
                     
-                    st.write(response)
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
-                
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                    except Exception as e:
+                        error_msg = f"Error: {str(e)}"
+                        st.error(error_msg)
+                        st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
     
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.chat_history = []
         st.rerun()
 
-# ----------------------------
-# INTERVIEW MODE (OPTIMIZED)
+# ----------------------------f
+# INTERVIEW MODE (STRICT EVALUATION)
 # ----------------------------
 elif st.session_state.mode == "interview":
     st.title("🎯 DevOps Interview Simulator")
@@ -444,36 +493,92 @@ elif st.session_state.mode == "interview":
         with col1:
             topic = st.selectbox(
                 "📚 Topic",
-                ["devops", "linux", "aws", "docker", "kubernetes"]
+                ["DevOps", "Linux", "AWS", "Docker", "Kubernetes", "CI/CD", "Git"]
             )
             
-            num_questions = st.slider("📝 Questions", 3, 5, 3)
+            num_questions = st.slider("📝 Number of Questions", 3, 10, 5)
         
         with col2:
             difficulty = st.selectbox(
                 "⚡ Difficulty",
-                ["beginner", "intermediate", "advanced"]
+                ["Beginner", "Intermediate", "Advanced"]
             )
         
         if st.button("🚀 Start Interview", use_container_width=True):
-            with st.spinner("⚡ Generating..."):
-                # Super short prompt for speed
-                prompt = f"List {num_questions} short {difficulty} {topic} questions. Format: 1. [q] 2. [q]"
+            with st.spinner("⚡ Generating questions..."):
+                # Customize prompt based on difficulty
+                if difficulty == "Beginner":
+                    difficulty_instruction = """BEGINNER LEVEL - Questions should be:
+- Basic concepts and definitions
+- Simple "What is..." or "Define..." questions
+- Fundamental terminology
+- Easy to answer for someone just starting
+- No complex scenarios or troubleshooting
+
+Examples:
+1. What is {topic}?
+2. Name three basic commands in {topic}.
+3. What is the purpose of {topic}?"""
+                
+                elif difficulty == "Intermediate":
+                    difficulty_instruction = """INTERMEDIATE LEVEL - Questions should be:
+- How things work together
+- Common use cases and practical scenarios
+- Differences between concepts
+- Basic troubleshooting
+- Real-world applications
+
+Examples:
+1. How does {topic} handle [specific feature]?
+2. What are the differences between X and Y in {topic}?
+3. Explain a common use case for {topic}."""
+                
+                else:  # Advanced
+                    difficulty_instruction = """ADVANCED LEVEL - Questions should be:
+- Deep technical details
+- Architecture and internal workings
+- Complex troubleshooting scenarios
+- Best practices and optimization
+- Security implications
+- Performance tuning
+
+Examples:
+1. Explain the internal architecture of {topic}.
+2. How would you troubleshoot [complex scenario] in {topic}?
+3. What are the security implications of {topic}?"""
+                
+                prompt = f"""Generate exactly {num_questions} {difficulty} level interview questions about {topic}.
+
+{difficulty_instruction}
+
+IMPORTANT:
+- Make questions appropriate for {difficulty} level
+- Format: numbered list (1. 2. 3...)
+- Each question on a new line
+- Keep questions clear and focused
+
+Generate {num_questions} questions now:"""
                 
                 try:
-                    questions_text = llm.invoke(prompt)
-                    questions = re.findall(r'\d+\.\s+(.+?)(?=\d+\.|$)', questions_text, re.DOTALL)
-                    questions = [q.strip()[:150] for q in questions if len(q.strip()) > 10][:num_questions]
+                    response = llm.invoke(prompt)
+                    questions_text = response.content if hasattr(response, 'content') else str(response)
                     
-                    st.session_state.questions = questions
-                    st.session_state.interview_started = True
-                    st.session_state.current_question = 0
-                    st.session_state.score = 0
-                    st.session_state.answers_log = []
-                    st.rerun()
+                    # Extract questions using regex
+                    questions = re.findall(r'\d+[\.\)]\s*(.+?)(?=\d+[\.\)]|$)', questions_text, re.DOTALL)
+                    questions = [q.strip() for q in questions if len(q.strip()) > 10][:num_questions]
+                    
+                    if len(questions) >= 3:
+                        st.session_state.questions = questions
+                        st.session_state.interview_started = True
+                        st.session_state.current_question = 0
+                        st.session_state.score = 0
+                        st.session_state.answers_log = []
+                        st.rerun()
+                    else:
+                        st.error("Failed to generate enough questions. Please try again.")
                 
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error generating questions: {str(e)}")
     
     else:
         if st.session_state.current_question < len(st.session_state.questions):
@@ -487,18 +592,88 @@ elif st.session_state.mode == "interview":
             question = st.session_state.questions[q_num]
             st.info(f"**{question}**")
             
-            user_answer = st.text_area("Your Answer:", key=f"answer_{q_num}", height=120)
+            user_answer = st.text_area("Your Answer:", key=f"answer_{q_num}", height=150)
             
             if st.button("Submit Answer", use_container_width=True):
                 if user_answer.strip():
-                    with st.spinner("⚡"):
-                        # Ultra-short evaluation
-                        eval_prompt = f"Is this correct? Say CORRECT or INCORRECT then explain briefly.\nQ: {question}\nA: {user_answer}"
+                    with st.spinner("⚡ Evaluating your answer..."):
+                        eval_prompt = f"""You are a fair but thorough technical interviewer evaluating a candidate's answer.
+
+Question: {question}
+Candidate's Answer: {user_answer}
+
+EVALUATION CRITERIA:
+Mark as CORRECT if the answer:
+✓ Demonstrates understanding of core concepts
+✓ Provides technical explanation (not just 1-2 words)
+✓ Is factually accurate
+✓ Addresses the main points of the question
+✓ Shows practical knowledge
+
+Mark as INCORRECT if the answer:
+✗ Is just 1-2 words without explanation
+✗ Is vague (like "idk", "not sure", "don't know")
+✗ Is factually wrong or completely off-topic
+✗ Shows no understanding of the concept
+
+SCORING GUIDE:
+- 0-3: Wrong, vague, or no real answer (INCORRECT)
+- 4-6: Partially correct but missing key concepts (INCORRECT)
+- 7-8: Good answer with proper explanation (CORRECT)
+- 9-10: Excellent comprehensive answer (CORRECT)
+
+Evaluation format:
+Line 1: ONLY write "CORRECT" or "INCORRECT"
+Line 2: Score: X/10
+Line 3+: Brief explanation of the score
+Line 4+: Key points covered/missing
+
+Evaluate now:"""
                         
                         try:
-                            evaluation = llm.invoke(eval_prompt)
+                            # First check for obviously wrong answers
+                            answer_lower = user_answer.lower().strip()
+                            word_count = len(user_answer.split())
                             
-                            is_correct = "CORRECT" in evaluation.upper()
+                            # Auto-fail conditions - only for extremely bad answers
+                            bad_answers = ['idk', "i don't know", "dont know", "no idea", "not sure", 
+                                         "dunno", "dk", "?", "...", "na", "n/a"]
+                            
+                            # Only auto-fail if answer is in bad list OR is less than 5 words
+                            if answer_lower in bad_answers or word_count < 5:
+                                is_correct = False
+                                evaluation = f"""INCORRECT
+
+Score: 0/10
+
+Your answer "{user_answer}" is not acceptable because:
+- Too short or vague to demonstrate understanding
+- Lacks technical explanation or details
+- Does not properly address the question
+
+A good answer should:
+- Explain the core concepts clearly
+- Provide technical details
+- Show practical understanding
+- Address all parts of the question"""
+                            else:
+                                # Send to LLM for evaluation
+                                response = llm.invoke(eval_prompt)
+                                evaluation = response.content if hasattr(response, 'content') else str(response)
+                                
+                                # Extract first line to check correctness
+                                first_line = evaluation.strip().split('\n')[0].upper()
+                                is_correct = "CORRECT" in first_line and "INCORRECT" not in first_line
+                                
+                                # Verify with score - but be more lenient
+                                score_match = re.search(r'(\d+)/10', evaluation)
+                                if score_match:
+                                    score = int(score_match.group(1))
+                                    # Override: score >= 7 means correct, < 7 means incorrect
+                                    if score >= 5:
+                                        is_correct = True
+                                    elif score < 5:
+                                        is_correct = False
                             
                             if is_correct:
                                 st.session_state.score += 1
@@ -506,7 +681,7 @@ elif st.session_state.mode == "interview":
                             else:
                                 st.error("❌ Incorrect")
                             
-                            st.markdown("**Feedback:**")
+                            st.markdown("**Detailed Feedback:**")
                             st.write(evaluation)
                             
                             st.session_state.answers_log.append({
@@ -525,9 +700,9 @@ elif st.session_state.mode == "interview":
                                 st.rerun()
                         
                         except Exception as e:
-                            st.error(f"Error: {e}")
+                            st.error(f"Error evaluating answer: {str(e)}")
                 else:
-                    st.warning("Please provide an answer!")
+                    st.warning("⚠️ Please provide an answer!")
         
         else:
             st.balloons()
@@ -536,7 +711,7 @@ elif st.session_state.mode == "interview":
             score = st.session_state.score
             total = len(st.session_state.questions)
             percentage = (score / total) * 100
-            pass_score = int(total * 0.6)
+            pass_score = int(total * 0.5)  # 70% passing threshold
             
             col1, col2, col3 = st.columns(3)
             
@@ -550,12 +725,22 @@ elif st.session_state.mode == "interview":
                 status = "PASSED ✅" if score >= pass_score else "FAILED ❌"
                 st.metric("Status", status)
             
-            st.markdown("### 📝 Review")
+            # Performance message
+            if percentage >= 80:
+                st.success("🌟 Excellent performance! You have strong DevOps knowledge.")
+            elif percentage >= 70:
+                st.success("👍 Good job! You passed the interview.")
+            elif percentage >= 50:
+                st.warning("⚠️ You need more practice. Review the feedback below.")
+            else:
+                st.error("📚 Please study more and try again. Review the concepts thoroughly.")
+            
+            st.markdown("### 📝 Answer Review")
             
             for idx, log in enumerate(st.session_state.answers_log, 1):
                 with st.expander(f"{'✅' if log['correct'] else '❌'} Question {idx}"):
                     st.markdown(f"**Q:** {log['question']}")
-                    st.markdown(f"**A:** {log['answer']}")
+                    st.markdown(f"**Your Answer:** {log['answer']}")
                     st.markdown(f"**Feedback:** {log['feedback']}")
             
             if st.button("🔄 New Interview", use_container_width=True):
@@ -572,6 +757,8 @@ elif st.session_state.mode == "interview":
 else:
     st.title("🚀 Welcome to DevOps AI Assistant")
     
+    st.info("💡 **Note:** This assistant specializes in DevOps, Cloud, Docker, Kubernetes, CI/CD, Linux, Git, and related technologies only.")
+    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -582,6 +769,7 @@ else:
         - Get instant AI answers
         - Context-aware responses
         - Fast & optimized
+        - **DevOps topics only**
         """)
         
         if st.button("Start Chatting 💬", use_container_width=True):
@@ -594,7 +782,8 @@ else:
         
         - Test your knowledge
         - Multiple topics
-        - Instant feedback
+        - **Strict evaluation**
+        - Detailed feedback
         - Track your progress
         """)
         
@@ -618,6 +807,6 @@ st.markdown("""
             🔗 LinkedIn
         </a>
     </p>
-    <p style='margin: 10px 0; font-size: 0.9em;'>Powered by Llama3 & Streamlit</p>
+    <p style='margin: 10px 0; font-size: 0.9em;'>Powered by Llama3 (Groq API) & Streamlit</p>
 </div>
 """, unsafe_allow_html=True)

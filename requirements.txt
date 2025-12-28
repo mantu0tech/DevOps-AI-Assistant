@@ -1,7 +1,9 @@
 streamlit
 langchain
 langchain-community
-langchain-ollama
 langchain-text-splitters
+langchain-groq
+langchain-huggingface
 chromadb
-ollama
+huggingface-hub
+python-dotenv
