@@ -7,4 +7,3 @@ langchain-huggingface
 chromadb
 huggingface-hub
 python-dotenv
-python-3.11
