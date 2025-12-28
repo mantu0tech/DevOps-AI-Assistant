@@ -50,7 +50,7 @@ if 'answers_log' not in st.session_state:
     st.session_state.answers_log = []
 
 # ----------------------------
-# HELPER FUNCTIONS
+# HELPER FUNCTIONSFload_llm
 # ----------------------------
 def is_devops_related(query):
     """Check if query is DevOps related"""
@@ -328,8 +328,8 @@ load_theme()
 @st.cache_resource
 def load_llm():
     return ChatGroq(
-        model="llama-3.1-8b-instant",
-        api_key=os.environ.get("GROQ_API_KEY"),
+        model_name="llama-3.1-8b-instant",
+        groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.7
     )
 
