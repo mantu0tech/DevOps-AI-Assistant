@@ -7,3 +7,6 @@ langchain-huggingface
 chromadb
 huggingface-hub
 python-dotenv
+sentence-transformers
+transformers
+torch
