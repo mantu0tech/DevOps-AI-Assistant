@@ -50,13 +50,16 @@ It is designed specifically for:
 ## 📸 Screenshots
 
 ### 🏠 Home Page
-![Home](screenshots/home.png)
+<img width="1803" height="819" alt="image" src="https://github.com/user-attachments/assets/d3e65c0a-13a4-4935-a9ba-2f02d0dca8b6" />
+
 
 ### 🎯 Interview Mode
-![Interview](screenshots/interview.png)
+<img width="1398" height="662" alt="image" src="https://github.com/user-attachments/assets/76353b37-e1fc-46a4-b3a3-3ff988dac99f" />
+
 
 ### 💬 Chat Assistant
-![Chat](screenshots/chat.png)
+<img width="1363" height="797" alt="image" src="https://github.com/user-attachments/assets/0a397614-da30-4a85-a51b-5867e9907f6f" />
+
 
 ---
 
