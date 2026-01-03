@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  devops_assistance:
+    environment:
+      - GROQ_API_KEY=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
+
+    build:
+      dockerfile: Dockerfile
+      context: .
+    image: allenaira/devops_assistant:latest
+    container_name: devops-devops_assistant
+    ports:
+      - 8501:8501
+    restart: always
