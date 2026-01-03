@@ -1,0 +1,7 @@
+chroma_db/*
+.gitignore
+app.py
+interview.py
+ui_app.py
+devops_data/
+
