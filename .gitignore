@@ -1,3 +1,7 @@
 new/*
 .env
 .git/*
+demo/*
+.venv
+__pycache__/*
+*.pyc

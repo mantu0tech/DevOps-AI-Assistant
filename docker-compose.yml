@@ -3,7 +3,7 @@ version: "3.9"
 services:
   devops_assistance:
     environment:
-      - GROQ_API_KEY=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
+      - GROQ_API_KEY=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  
 
     build:
       dockerfile: Dockerfile
@@ -13,3 +13,20 @@ services:
     ports:
       - 8501:8501
     restart: always
+    depends_on:
+      - database
+
+  database:
+    image: mysql:8
+    container_name: opsmate-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: opsmate
+    ports:
+      - "3306:3306"
+    restart: always
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:      

@@ -4,4 +4,8 @@ app.py
 interview.py
 ui_app.py
 devops_data/
+screenshorts/
+venv/
+docker-compose.yml
+
 
